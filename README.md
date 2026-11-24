@@ -88,7 +88,7 @@ It is deterministic and has no external dependency, which suits a POC and makes 
 
 ### How the dish map was checked against the data
 
-Restaurant names often contain a dish, so the dish map was validated by counting the cuisines of restaurants whose name contains each dish (the same thing as a `$match` on `name`, `$unwind` on `cuisines`, `$group`):
+Restaurant names often contain a dish, so the dish map was validated (`scripts/profile_dataset.py`) by counting the cuisines of restaurants whose name contains each dish (the same thing as a `$match` on `name`, `$unwind` on `cuisines`, `$group`):
 
 | Dish in name | Restaurants | Cuisines in the data | Mapping |
 |---|---|---|---|
@@ -177,6 +177,12 @@ Measured on the full dataset, `GET /v1/restaurants?city=Gurgaon`:
 `SeededDatasetIntegrationTest` asserts the "after" row using the MongoDB profiler, so a change that breaks index use fails the build.
 
 ### Data cleanup during seeding
+
+Each rule below comes from profiling the CSV before ingesting it. Reproduce every finding, including the raw currency labels and the dish table above, with:
+
+```bash
+python3 scripts/profile_dataset.py
+```
 
 - The CSV is ISO-8859-1, so it is read with that charset.
 - Zomato's own country codes (1 is India, 162 is the Philippines) are mapped to a country name and an ISO 3166 code, using the dataset's `Country-Code.xlsx`.
