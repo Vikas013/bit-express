@@ -11,3 +11,12 @@ app:
   seed:
     enabled: ${APP_SEED_ENABLED:true}
     resource: ${APP_SEED_RESOURCE:zomato.csv}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

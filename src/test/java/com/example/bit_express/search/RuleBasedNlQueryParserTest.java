@@ -119,15 +119,37 @@ class RuleBasedNlQueryParserTest {
   void explicitParamsOverrideParsedValues() {
     RestaurantQueryParams explicit =
         new RestaurantQueryParams(
-            "dhaba", "Noida", null, List.of("Chinese"), 3.5, 800, null, null, null, "name", "asc",
-            2, 5);
+            "dhaba",
+            "Noida",
+            null,
+            List.of("Chinese"),
+            3.5,
+            800,
+            null,
+            null,
+            null,
+            "name",
+            "asc",
+            2,
+            5);
     RestaurantQueryParams p =
         parser.parse("best south indian in gurgaon under 1000 above 4", explicit).params();
     assertThat(p)
         .isEqualTo(
             new RestaurantQueryParams(
-                "dhaba", "Noida", null, List.of("Chinese"), 3.5, 800, null, null, null, "name",
-                "asc", 2, 5));
+                "dhaba",
+                "Noida",
+                null,
+                List.of("Chinese"),
+                3.5,
+                800,
+                null,
+                null,
+                null,
+                "name",
+                "asc",
+                2,
+                5));
   }
 
   @Test

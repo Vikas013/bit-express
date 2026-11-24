@@ -55,7 +55,12 @@ class RestaurantApiIntegrationTest {
             .perform(
                 postJson(
                     restaurant(
-                        "South Express Kitchen", "Gurgaon", "South Indian", 650, 4.6, 28.4855,
+                        "South Express Kitchen",
+                        "Gurgaon",
+                        "South Indian",
+                        650,
+                        4.6,
+                        28.4855,
                         77.0878)))
             .andExpect(status().isCreated())
             .andExpect(header().string("Location", containsString("/v1/restaurants/")))
@@ -149,7 +154,9 @@ class RestaurantApiIntegrationTest {
 
     mockMvc.perform(get("/v1/restaurants/{id}", id)).andExpect(status().isNotFound());
     mockMvc
-        .perform(get("/v1/restaurants/{id}", id).header(RestaurantController.TENANT_HEADER, "quick-eats"))
+        .perform(
+            get("/v1/restaurants/{id}", id)
+                .header(RestaurantController.TENANT_HEADER, "quick-eats"))
         .andExpect(status().isOk());
     mockMvc
         .perform(get("/v1/restaurants").header(RestaurantController.TENANT_HEADER, "quick-eats"))
@@ -220,14 +227,10 @@ class RestaurantApiIntegrationTest {
     insertSampleRestaurants();
     mockMvc
         .perform(get("/v1/restaurants?sortBy=cost"))
-        .andExpect(
-            jsonPath(
-                "$.results[*].averageCostForTwo", contains(300, 400, 700, 1200)));
+        .andExpect(jsonPath("$.results[*].averageCostForTwo", contains(300, 400, 700, 1200)));
     mockMvc
         .perform(get("/v1/restaurants?sortBy=cost&sortDir=desc"))
-        .andExpect(
-            jsonPath(
-                "$.results[*].averageCostForTwo", contains(1200, 700, 400, 300)));
+        .andExpect(jsonPath("$.results[*].averageCostForTwo", contains(1200, 700, 400, 300)));
     mockMvc
         .perform(get("/v1/restaurants?sortBy=name"))
         .andExpect(
@@ -289,13 +292,17 @@ class RestaurantApiIntegrationTest {
   void searchParsesTheBriefExamples() throws Exception {
     insertSampleRestaurants();
     mockMvc
-        .perform(get("/v1/restaurants/search").param("q", "Best restaurants in Gurgaon with South Indian Food"))
+        .perform(
+            get("/v1/restaurants/search")
+                .param("q", "Best restaurants in Gurgaon with South Indian Food"))
         .andExpect(jsonPath("$.query", is("Best restaurants in Gurgaon with South Indian Food")))
         .andExpect(jsonPath("$.interpretedFilters.city", is("Gurgaon")))
         .andExpect(jsonPath("$.interpretedFilters.cuisines", contains("South Indian")))
         .andExpect(jsonPath("$.results[*].name", contains("Cyber Dosa Hub")));
     mockMvc
-        .perform(get("/v1/restaurants/search").param("q", "Restaurants in Gurgaon under Rs. 1000 for two"))
+        .perform(
+            get("/v1/restaurants/search")
+                .param("q", "Restaurants in Gurgaon under Rs. 1000 for two"))
         .andExpect(jsonPath("$.interpretedFilters.maxCostForTwo", is(1000)))
         .andExpect(jsonPath("$.totalElements", is(3)));
     mockMvc
@@ -311,7 +318,8 @@ class RestaurantApiIntegrationTest {
   void searchAcceptsEveryListParameterAndExplicitParamsWin() throws Exception {
     insertSampleRestaurants();
     mockMvc
-        .perform(get("/v1/restaurants/search?name=momos&country=india&maxDistanceKm=5&" + CYBER_HUB))
+        .perform(
+            get("/v1/restaurants/search?name=momos&country=india&maxDistanceKm=5&" + CYBER_HUB))
         .andExpect(jsonPath("$.results[*].name", contains("Galleria Momos")));
     mockMvc
         .perform(
@@ -329,10 +337,10 @@ class RestaurantApiIntegrationTest {
   private static String restaurant(
       String name, String city, String cuisine, int cost, double rating, double lat, double lon) {
     return """
-        {"name": "%s", "city": "%s", "address": "Sample Street, %s", "country": "India",
-         "cuisines": ["%s"], "averageCostForTwo": %d, "aggregateRating": %s,
-         "latitude": %s, "longitude": %s}
-        """
+    {"name": "%s", "city": "%s", "address": "Sample Street, %s", "country": "India",
+     "cuisines": ["%s"], "averageCostForTwo": %d, "aggregateRating": %s,
+     "latitude": %s, "longitude": %s}
+    """
         .formatted(name, city, city, cuisine, cost, rating, lat, lon);
   }
 
@@ -340,10 +348,18 @@ class RestaurantApiIntegrationTest {
     for (String json :
         List.of(
             restaurant("Cyber Dosa Hub", "Gurgaon", "South Indian", 700, 4.5, 28.4946, 77.0887),
-            restaurant("Sector 29 Street Bites", "Gurgaon", "Street Food", 400, 4.2, 28.4685, 77.0645),
+            restaurant(
+                "Sector 29 Street Bites", "Gurgaon", "Street Food", 400, 4.2, 28.4685, 77.0645),
             restaurant(
                 "Connaught Biryani House", "New Delhi", "Biryani", 1200, 4.8, 28.6315, 77.2167),
-            restaurant("Galleria Momos", "Gurgaon", "Chinese\", \"Street Food", 300, 3.9, 28.4672, 77.0817))) {
+            restaurant(
+                "Galleria Momos",
+                "Gurgaon",
+                "Chinese\", \"Street Food",
+                300,
+                3.9,
+                28.4672,
+                77.0817))) {
       mockMvc.perform(postJson(json)).andExpect(status().isCreated());
     }
   }

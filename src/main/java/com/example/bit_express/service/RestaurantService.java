@@ -103,8 +103,7 @@ public class RestaurantService {
       List<String> warnings) {
     validate(params);
     int page = params.page() == null ? 0 : params.page();
-    int size =
-        Math.min(MAX_PAGE_SIZE, params.size() == null ? DEFAULT_PAGE_SIZE : params.size());
+    int size = Math.min(MAX_PAGE_SIZE, params.size() == null ? DEFAULT_PAGE_SIZE : params.size());
     String sortBy = sortBy(params);
 
     Criteria filter = buildFilter(tenantId, params);
@@ -140,7 +139,8 @@ public class RestaurantService {
     long total = meta.isEmpty() ? 0 : ((Number) meta.get(0).get("total")).longValue();
     List<RestaurantResponse> items =
         root.getList("items", Document.class, List.of()).stream()
-            .map(doc -> toResponse(mongoTemplate.getConverter().read(Restaurant.class, doc), km(doc)))
+            .map(doc ->
+                toResponse(mongoTemplate.getConverter().read(Restaurant.class, doc), km(doc)))
             .toList();
 
     return new PagedRestaurantResponse(

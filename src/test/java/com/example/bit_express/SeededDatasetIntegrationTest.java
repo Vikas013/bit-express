@@ -116,7 +116,8 @@ class SeededDatasetIntegrationTest {
             .first();
 
     assertThat(profile).isNotNull();
-    assertThat(profile.getString("planSummary")).isEqualTo("IXSCAN { tenantId: 1, cityNormalized: 1, aggregateRating: -1, _id: -1 }");
+    assertThat(profile.getString("planSummary"))
+        .isEqualTo("IXSCAN { tenantId: 1, cityNormalized: 1, aggregateRating: -1, _id: -1 }");
     assertThat(profile.get("docsExamined", Number.class).intValue()).isEqualTo(GURGAON);
     assertThat(profile.getBoolean("hasSortStage", false)).isFalse();
   }
