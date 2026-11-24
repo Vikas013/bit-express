@@ -56,6 +56,9 @@ public class CsvRestaurantSeeder implements ApplicationRunner {
     @Value("${app.seed.resource:zomato.csv}")
     private String seedResource;
 
+    @Value("${app.default-tenant}")
+    private String tenantId;
+
     public CsvRestaurantSeeder(RestaurantRepository restaurantRepository, RuleBasedNlQueryParser nlQueryParser) {
         this.restaurantRepository = restaurantRepository;
         this.nlQueryParser = nlQueryParser;
@@ -123,10 +126,12 @@ public class CsvRestaurantSeeder implements ApplicationRunner {
         }
 
         Restaurant r = new Restaurant();
+        r.setTenantId(tenantId);
         r.setExternalRestaurantId(parseLong(getOptional(record, "Restaurant ID")));
         r.setName(name.trim());
         r.setCity(city.trim());
         r.setAddress(getOptional(record, "Address"));
+        r.setLocality(getOptional(record, "Locality"));
 
         Integer countryCode = parseInt(getOptional(record, "Country Code"));
         r.setCountry(countryCode != null ? COUNTRY_CODE_MAP.getOrDefault(countryCode, String.valueOf(countryCode)) : null);
@@ -144,14 +149,16 @@ public class CsvRestaurantSeeder implements ApplicationRunner {
 
         r.setAverageCostForTwo(parseInt(getOptional(record, "Average Cost for two")));
         r.setCurrency(getOptional(record, "Currency"));
+        r.setPriceRange(parseInt(getOptional(record, "Price range")));
         r.setAggregateRating(parseDouble(getOptional(record, "Aggregate rating")));
+        r.setRatingText(getOptional(record, "Rating text"));
+        r.setVotes(parseInt(getOptional(record, "Votes")));
         r.setHasOnlineDelivery(parseYesNo(getOptional(record, "Has Online delivery")));
         r.setHasTableBooking(parseYesNo(getOptional(record, "Has Table booking")));
 
         Double lat = parseDouble(getOptional(record, "Latitude"));
         Double lon = parseDouble(getOptional(record, "Longitude"));
         if (isValidCoordinate(lat, lon)) {
-            // GeoJSON requires [longitude, latitude] order
             r.setLocation(new GeoJsonPoint(lon, lat));
         }
 

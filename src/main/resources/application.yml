@@ -7,6 +7,7 @@ spring:
       auto-index-creation: true
 
 app:
+  default-tenant: ${APP_DEFAULT_TENANT:bite-express}
   seed:
     enabled: ${APP_SEED_ENABLED:true}
     resource: ${APP_SEED_RESOURCE:zomato.csv}

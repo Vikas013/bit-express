@@ -1,237 +1,222 @@
 package com.example.bit_express.search;
 
-import com.example.bit_express.dto.RestaurantSearchCriteria;
+import com.example.bit_express.dto.RestaurantQueryParams;
 import com.example.bit_express.model.Restaurant;
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
-
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.data.mongodb.core.MongoOperations;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class RuleBasedNlQueryParser implements NlQueryParser {
 
-    private static final Pattern BUDGET_PATTERN =
-            Pattern.compile("(?:under|below|less than|within|max)\\s*(?:rs\\.?|inr|₹|\\$)?\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern RATING_PATTERN =
-            Pattern.compile("(?:above|over|at least|min|rating)\\s*(\\d(?:\\.\\d)?)", Pattern.CASE_INSENSITIVE);
-    private static final Pattern NEAREST_PATTERN =
-            Pattern.compile("\\b(nearest|closest|near me|nearby)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern BEST_PATTERN =
-            Pattern.compile("\\b(best|top|highest rated|popular)\\b", Pattern.CASE_INSENSITIVE);
-    private static final Pattern CHEAPEST_PATTERN =
-            Pattern.compile("\\b(cheapest|budget|affordable|low cost)\\b", Pattern.CASE_INSENSITIVE);
+  static final double DEFAULT_LAT = 28.4595;
+  static final double DEFAULT_LON = 77.0266;
 
-    private static final Map<String, String> DISH_TO_CUISINE = Map.ofEntries(
-            Map.entry("vada pav", "Street Food"),
-            Map.entry("pav bhaji", "Street Food"),
-            Map.entry("chaat", "Street Food"),
-            Map.entry("golgappa", "Street Food"),
-            Map.entry("dosa", "South Indian"),
-            Map.entry("idli", "South Indian"),
-            Map.entry("uttapam", "South Indian"),
-            Map.entry("biryani", "Biryani"),
-            Map.entry("butter chicken", "North Indian"),
-            Map.entry("paneer", "North Indian"),
-            Map.entry("dim sum", "Chinese"),
-            Map.entry("momos", "Chinese"),
-            Map.entry("sushi", "Japanese"),
-            Map.entry("pasta", "Italian"),
-            Map.entry("burger", "Burger")
-    );
+  private static final Pattern BUDGET_PATTERN =
+      Pattern.compile("(?:under|below|less than|within|max)\\s*(?:rs\\.?|inr|₹|\\$)?\\s*(\\d+)");
+  private static final Pattern RATING_PATTERN =
+      Pattern.compile("(?:above|over|at least|min|rating)\\s*(\\d(?:\\.\\d)?)\\b");
+  private static final Pattern NEAREST_PATTERN =
+      Pattern.compile("\\b(nearest|closest|near me|nearby)\\b");
+  private static final Pattern BEST_PATTERN =
+      Pattern.compile("\\b(best|top|highest rated|popular)\\b");
+  private static final Pattern CHEAPEST_PATTERN =
+      Pattern.compile("\\b(cheapest|budget|affordable|low cost)\\b");
 
-    private static final Map<String, String> COUNTRY_MAP = Map.ofEntries(
-            Map.entry("india", "India"),
-            Map.entry("australia", "Australia"),
-            Map.entry("brazil", "Brazil"),
-            Map.entry("canada", "Canada"),
-            Map.entry("indonesia", "Indonesia"),
-            Map.entry("new zealand", "New Zealand"),
-            Map.entry("philippines", "Philippines"),
-            Map.entry("qatar", "Qatar"),
-            Map.entry("singapore", "Singapore"),
-            Map.entry("south africa", "South Africa"),
-            Map.entry("sri lanka", "Sri Lanka"),
-            Map.entry("turkey", "Turkey"),
-            Map.entry("uae", "UAE"),
-            Map.entry("united arab emirates", "UAE"),
-            Map.entry("united kingdom", "United Kingdom"),
-            Map.entry("uk", "United Kingdom"),
-            Map.entry("united states", "United States"),
-            Map.entry("usa", "United States")
-    );
+  private static final Map<String, String> CITY_ALIASES =
+      Map.of(
+          "gurugram", "gurgaon",
+          "bengaluru", "bangalore",
+          "bombay", "mumbai",
+          "madras", "chennai",
+          "calcutta", "kolkata");
 
-    private final MongoTemplate mongoTemplate;
-    private volatile List<String> cachedCities = List.of();
-    private volatile List<String> cachedCuisines = List.of();
+  private static final Map<String, String> DISH_TO_CUISINE =
+      Map.ofEntries(
+          Map.entry("vada pav", "Street Food"),
+          Map.entry("pav bhaji", "Street Food"),
+          Map.entry("chaat", "Street Food"),
+          Map.entry("golgappa", "Street Food"),
+          Map.entry("dosa", "South Indian"),
+          Map.entry("idli", "South Indian"),
+          Map.entry("uttapam", "South Indian"),
+          Map.entry("biryani", "Biryani"),
+          Map.entry("butter chicken", "North Indian"),
+          Map.entry("paneer", "North Indian"),
+          Map.entry("dim sum", "Chinese"),
+          Map.entry("momos", "Chinese"),
+          Map.entry("sushi", "Japanese"),
+          Map.entry("pasta", "Italian"),
+          Map.entry("burger", "Burger"));
 
-    public RuleBasedNlQueryParser(MongoTemplate mongoTemplate) {
-        this.mongoTemplate = mongoTemplate;
+  private static final Map<String, String> COUNTRY_MAP =
+      Map.ofEntries(
+          Map.entry("india", "India"),
+          Map.entry("australia", "Australia"),
+          Map.entry("brazil", "Brazil"),
+          Map.entry("canada", "Canada"),
+          Map.entry("indonesia", "Indonesia"),
+          Map.entry("new zealand", "New Zealand"),
+          Map.entry("philippines", "Philippines"),
+          Map.entry("qatar", "Qatar"),
+          Map.entry("singapore", "Singapore"),
+          Map.entry("south africa", "South Africa"),
+          Map.entry("sri lanka", "Sri Lanka"),
+          Map.entry("turkey", "Turkey"),
+          Map.entry("uae", "UAE"),
+          Map.entry("united arab emirates", "UAE"),
+          Map.entry("united kingdom", "United Kingdom"),
+          Map.entry("uk", "United Kingdom"),
+          Map.entry("united states", "United States"),
+          Map.entry("usa", "United States"));
+
+  private final MongoOperations mongoOperations;
+  private volatile List<String> cachedCities = List.of();
+  private volatile List<String> cachedCuisines = List.of();
+
+  public RuleBasedNlQueryParser(MongoOperations mongoOperations) {
+    this.mongoOperations = mongoOperations;
+  }
+
+  public void refreshVocabulary() {
+    cachedCities = distinctLongestFirst("city");
+    cachedCuisines = distinctLongestFirst("cuisines");
+  }
+
+  private List<String> distinctLongestFirst(String field) {
+    List<String> values =
+        new ArrayList<>(mongoOperations.findDistinct(field, Restaurant.class, String.class));
+    values.removeIf(v -> !StringUtils.hasText(v));
+    values.sort(Comparator.comparingInt(String::length).reversed());
+    return List.copyOf(values);
+  }
+
+  @Override
+  public ParseResult parse(String query, RestaurantQueryParams explicit) {
+    if (cachedCities.isEmpty() || cachedCuisines.isEmpty()) {
+      refreshVocabulary();
     }
 
-    public void refreshVocabulary() {
-        List<String> cities = new ArrayList<>(mongoTemplate.findDistinct("city", Restaurant.class, String.class));
-        cities.removeIf(s -> !StringUtils.hasText(s));
-        cities.sort(Comparator.comparingInt(String::length).reversed());
-        this.cachedCities = List.copyOf(cities);
+    String city = explicit.city();
+    String country = explicit.country();
+    List<String> cuisines = explicit.cuisines();
+    Integer maxCost = explicit.maxCostForTwo();
+    Double minRating = explicit.minRating();
+    Double lat = explicit.lat();
+    Double lon = explicit.lon();
+    String sortBy = explicit.sortBy();
+    String sortDir = explicit.sortDir();
+    List<String> warnings = new ArrayList<>();
 
-        List<String> cuisines = new ArrayList<>(mongoTemplate.findDistinct("cuisines", Restaurant.class, String.class));
-        cuisines.removeIf(s -> !StringUtils.hasText(s));
-        cuisines.sort(Comparator.comparingInt(String::length).reversed());
-        this.cachedCuisines = List.copyOf(cuisines);
+    if (StringUtils.hasText(query)) {
+      String text = withCityAliases(query.toLowerCase(Locale.ROOT).trim());
+      boolean matched = false;
+
+      if (maxCost == null) {
+        maxCost = firstNumber(BUDGET_PATTERN, text).map(Integer::parseInt).orElse(null);
+        matched |= maxCost != null;
+      }
+      if (minRating == null) {
+        minRating = firstNumber(RATING_PATTERN, text).map(Double::parseDouble).orElse(null);
+        matched |= minRating != null;
+      }
+      if (!StringUtils.hasText(city)) {
+        city = findTerm(text, cachedCities).orElse(null);
+        matched |= city != null;
+      }
+      if (!StringUtils.hasText(city) && !StringUtils.hasText(country)) {
+        country = findTerm(text, COUNTRY_MAP).orElse(null);
+        matched |= country != null;
+      }
+      if (cuisines == null || cuisines.isEmpty()) {
+        cuisines =
+            findTerm(text, cachedCuisines)
+                .or(() -> findTerm(text, DISH_TO_CUISINE))
+                .map(List::of)
+                .orElse(null);
+        matched |= cuisines != null;
+      }
+      if (!StringUtils.hasText(sortBy)) {
+        if (NEAREST_PATTERN.matcher(text).find()) {
+          sortBy = "distance";
+          if (lat == null || lon == null) {
+            lat = DEFAULT_LAT;
+            lon = DEFAULT_LON;
+            warnings.add(
+                "No coordinates supplied for a proximity search; using Gurugram city centre ("
+                    + DEFAULT_LAT
+                    + ", "
+                    + DEFAULT_LON
+                    + ").");
+          }
+        } else if (CHEAPEST_PATTERN.matcher(text).find()) {
+          sortBy = "cost";
+          sortDir = "asc";
+        } else if (BEST_PATTERN.matcher(text).find()) {
+          sortBy = "rating";
+          sortDir = "desc";
+        }
+        matched |= sortBy != null;
+      }
+      if (!matched) {
+        warnings.add(
+            "No city, country, cuisine, dish, budget or rating recognised in the query; returning"
+                + " top-rated restaurants.");
+      }
     }
 
-    @Override
-    public ParseResult parse(
-            String rawQuery,
-            String cityOverride,
-            String cuisineOverride,
-            Integer maxCostOverride,
-            Double minRatingOverride,
-            Double latOverride,
-            Double lonOverride,
-            String sortByOverride,
-            String sortDirOverride,
-            int page,
-            int size
-    ) {
-        if (cachedCities.isEmpty() || cachedCuisines.isEmpty()) {
-            refreshVocabulary();
-        }
+    RestaurantQueryParams params =
+        new RestaurantQueryParams(
+            explicit.name(),
+            city,
+            country,
+            cuisines,
+            minRating,
+            maxCost,
+            lat,
+            lon,
+            explicit.maxDistanceKm(),
+            sortBy,
+            sortDir,
+            explicit.page(),
+            explicit.size());
+    return new ParseResult(params, warnings);
+  }
 
-        String city = cityOverride;
-        String country = null;
-        String cuisine = cuisineOverride;
-        Integer maxCost = maxCostOverride;
-        Double minRating = minRatingOverride;
-        Double lat = latOverride;
-        Double lon = lonOverride;
-        String sortBy = sortByOverride;
-        String sortDir = sortDirOverride;
-        List<String> warnings = new ArrayList<>();
-        boolean matchedAnything = false;
-
-        if (StringUtils.hasText(rawQuery)) {
-            String lower = rawQuery.toLowerCase(Locale.ROOT).trim();
-
-            if (maxCost == null) {
-                Matcher budgetMatcher = BUDGET_PATTERN.matcher(lower);
-                if (budgetMatcher.find()) {
-                    maxCost = Integer.parseInt(budgetMatcher.group(1));
-                    matchedAnything = true;
-                }
-            }
-
-            if (minRating == null) {
-                Matcher ratingMatcher = RATING_PATTERN.matcher(lower);
-                if (ratingMatcher.find()) {
-                    minRating = Double.parseDouble(ratingMatcher.group(1));
-                    matchedAnything = true;
-                }
-            }
-
-            if (!StringUtils.hasText(city)) {
-                for (String knownCity : cachedCities) {
-                    if (containsWord(lower, knownCity.toLowerCase(Locale.ROOT))) {
-                        city = knownCity;
-                        matchedAnything = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!StringUtils.hasText(city)) {
-                for (Map.Entry<String, String> entry : COUNTRY_MAP.entrySet()) {
-                    if (containsWord(lower, entry.getKey())) {
-                        country = entry.getValue();
-                        matchedAnything = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!StringUtils.hasText(cuisine)) {
-                for (String knownCuisine : cachedCuisines) {
-                    if (containsWord(lower, knownCuisine.toLowerCase(Locale.ROOT))) {
-                        cuisine = knownCuisine;
-                        matchedAnything = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!StringUtils.hasText(cuisine)) {
-                for (Map.Entry<String, String> dish : DISH_TO_CUISINE.entrySet()) {
-                    if (containsWord(lower, dish.getKey())) {
-                        cuisine = dish.getValue();
-                        matchedAnything = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!StringUtils.hasText(sortBy)) {
-                if (NEAREST_PATTERN.matcher(lower).find()) {
-                    sortBy = "distance";
-                    sortDir = "asc";
-                    matchedAnything = true;
-                    if (lat == null || lon == null) {
-                        lat = 28.4595;
-                        lon = 77.0266;
-                        warnings.add("No coordinates supplied for proximity search; defaulted to Gurugram center (28.4595, 77.0266).");
-                    }
-                } else if (CHEAPEST_PATTERN.matcher(lower).find()) {
-                    sortBy = "cost";
-                    sortDir = "asc";
-                    matchedAnything = true;
-                } else if (BEST_PATTERN.matcher(lower).find()) {
-                    sortBy = "rating";
-                    sortDir = "desc";
-                    matchedAnything = true;
-                }
-            }
-
-            if (!matchedAnything) {
-                warnings.add("No known city, country, cuisine, dish, or budget filter recognized in query; returning top-rated restaurants.");
-            }
-        }
-
-        if (!StringUtils.hasText(sortBy)) {
-            sortBy = (lat != null && lon != null) ? "distance" : "rating";
-        }
-        if (!StringUtils.hasText(sortDir)) {
-            sortDir = "distance".equalsIgnoreCase(sortBy) || "cost".equalsIgnoreCase(sortBy) ? "asc" : "desc";
-        }
-
-        List<String> cuisines = StringUtils.hasText(cuisine) ? List.of(cuisine) : List.of();
-        RestaurantSearchCriteria criteria = new RestaurantSearchCriteria(
-                null, city, country, cuisines, minRating, maxCost, lat, lon, sortBy, sortDir, page, size
-        );
-
-        Map<String, Object> interpreted = new LinkedHashMap<>();
-        if (city != null) interpreted.put("city", city);
-        if (country != null) interpreted.put("country", country);
-        if (cuisine != null) interpreted.put("cuisine", cuisine);
-        if (maxCost != null) interpreted.put("maxCostForTwo", maxCost);
-        if (minRating != null) interpreted.put("minRating", minRating);
-        if (lat != null && lon != null) {
-            interpreted.put("lat", lat);
-            interpreted.put("lon", lon);
-        }
-        interpreted.put("sortBy", sortBy);
-        interpreted.put("sortDir", sortDir);
-
-        return new ParseResult(criteria, interpreted, warnings);
+  private static String withCityAliases(String text) {
+    for (Map.Entry<String, String> alias : CITY_ALIASES.entrySet()) {
+      text = wordPattern(alias.getKey()).matcher(text).replaceAll(alias.getValue());
     }
+    return text;
+  }
 
-    private boolean containsWord(String text, String term) {
-        return Pattern.compile("(?<!\\w)" + Pattern.quote(term) + "(?!\\w)").matcher(text).find();
-    }
+  private static Optional<String> firstNumber(Pattern pattern, String text) {
+    Matcher m = pattern.matcher(text);
+    return m.find() ? Optional.of(m.group(1)) : Optional.empty();
+  }
+
+  private static Optional<String> findTerm(String text, List<String> vocabulary) {
+    return vocabulary.stream()
+        .filter(term -> wordPattern(term.toLowerCase(Locale.ROOT)).matcher(text).find())
+        .findFirst();
+  }
+
+  private static Optional<String> findTerm(String text, Map<String, String> synonyms) {
+    return synonyms.entrySet().stream()
+        .filter(e -> wordPattern(e.getKey()).matcher(text).find())
+        .map(Map.Entry::getValue)
+        .findFirst();
+  }
+
+  private static Pattern wordPattern(String term) {
+    return Pattern.compile("(?<!\\w)" + Pattern.quote(term) + "(?!\\w)");
+  }
 }
