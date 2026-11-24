@@ -26,6 +26,7 @@ class SeededDatasetIntegrationTest {
   private static final int GURGAON_SOUTH_INDIAN = 70;
   private static final int GURGAON_UNDER_1000 = 924;
   private static final int STREET_FOOD = 562;
+  private static final int NOT_RATED = 2148;
 
   @DynamicPropertySource
   static void mongo(DynamicPropertyRegistry registry) {
@@ -58,6 +59,40 @@ class SeededDatasetIntegrationTest {
     assertThat(JsonPath.<Integer>read(json, "$.votes")).isEqualTo(314);
     assertThat(JsonPath.<String>read(json, "$.ratingText")).isEqualTo("Excellent");
     assertThat(JsonPath.<Integer>read(json, "$.priceRange")).isEqualTo(3);
+    assertThat(JsonPath.<String>read(json, "$.countryCode")).isEqualTo("PH");
+    assertThat(JsonPath.<String>read(json, "$.currency")).isEqualTo("PHP");
+  }
+
+  @Test
+  void derivesIsoCurrencyFromTheCountryInsteadOfTheRawLabel() throws Exception {
+    for (String[] expected :
+        new String[][] {
+          {"India", "INR"},
+          {"United States", "USD"},
+          {"United Kingdom", "GBP"},
+          {"Singapore", "SGD"},
+          {"Australia", "AUD"}
+        }) {
+      String json = getJson("/v1/restaurants?size=100&country=" + expected[0]);
+      assertThat(JsonPath.<List<String>>read(json, "$.results[*].currency"))
+          .as(expected[0])
+          .containsOnly(expected[1]);
+    }
+  }
+
+  @Test
+  void removesDuplicateCuisinesWithinARow() throws Exception {
+    assertThat(JsonPath.<List<String>>read(getJson("/v1/restaurants/18384142"), "$.cuisines"))
+        .containsExactly("Beverages", "Salad");
+  }
+
+  @Test
+  void notRatedRestaurantsHaveNoRatingInsteadOfZero() throws Exception {
+    String json = getJson("/v1/restaurants/18361580");
+    assertThat(JsonPath.<String>read(json, "$.ratingText")).isEqualTo("Not rated");
+    assertThat(JsonPath.<Object>read(json, "$")).asString().doesNotContain("aggregateRating");
+    assertThat(total(getJson("/v1/restaurants?size=1&minRating=0")))
+        .isEqualTo(CSV_ROWS - NOT_RATED);
   }
 
   @Test
@@ -70,7 +105,7 @@ class SeededDatasetIntegrationTest {
     assertThat(JsonPath.<List<List<String>>>read(json, "$.results[*].cuisines"))
         .allSatisfy(cuisines -> assertThat(cuisines).contains("South Indian"));
     assertThat(JsonPath.<List<Double>>read(json, "$.results[*].aggregateRating"))
-        .isSortedAccordingTo(Comparator.reverseOrder());
+        .isSortedAccordingTo(Comparator.nullsLast(Comparator.reverseOrder()));
   }
 
   @Test

@@ -25,7 +25,18 @@ class RuleBasedNlQueryParserTest {
     when(mongo.findDistinct("city", Restaurant.class, String.class))
         .thenReturn(List.of("Gurgaon", "New Delhi", "Noida", "Bangalore"));
     when(mongo.findDistinct("cuisines", Restaurant.class, String.class))
-        .thenReturn(List.of("South Indian", "North Indian", "Street Food", "Chinese", "Indian"));
+        .thenReturn(
+            List.of(
+                "South Indian",
+                "North Indian",
+                "Street Food",
+                "Chinese",
+                "Indian",
+                "Sushi",
+                "Burger",
+                "Kebab"));
+    when(mongo.findDistinct("country", Restaurant.class, String.class))
+        .thenReturn(List.of("India", "United Kingdom", "United States", "UAE"));
     parser = new RuleBasedNlQueryParser(mongo);
   }
 
@@ -105,6 +116,25 @@ class RuleBasedNlQueryParserTest {
     RestaurantQueryParams p = parse("restaurants in the UK").params();
     assertThat(p.city()).isNull();
     assertThat(p.country()).isEqualTo("United Kingdom");
+  }
+
+  @Test
+  void countryAliasesResolveToDatasetCountryNames() {
+    assertThat(parse("restaurants in the USA").params().country()).isEqualTo("United States");
+    assertThat(parse("dinner in united arab emirates").params().country()).isEqualTo("UAE");
+  }
+
+  @Test
+  void dishesThatAreDatasetCuisinesMatchTheCuisineDirectly() {
+    assertThat(parse("sushi near me").params().cuisines()).containsExactly("Sushi");
+    assertThat(parse("best burger in town").params().cuisines()).containsExactly("Burger");
+    assertThat(parse("kebab in noida").params().cuisines()).containsExactly("Kebab");
+  }
+
+  @Test
+  void dataBackedDishesMapToTheirCuisine() {
+    assertThat(parse("chole bhature").params().cuisines()).containsExactly("Street Food");
+    assertThat(parse("momos please").params().cuisines()).containsExactly("Chinese");
   }
 
   @Test

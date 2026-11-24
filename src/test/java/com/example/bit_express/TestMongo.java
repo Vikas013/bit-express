@@ -16,7 +16,6 @@ final class TestMongo {
   static void register(DynamicPropertyRegistry registry, String database, boolean seed) {
     String uri = CONTAINER.getReplicaSetUrl(database);
     registry.add("spring.mongodb.uri", () -> uri);
-    registry.add("spring.data.mongodb.uri", () -> uri);
     registry.add("app.seed.enabled", () -> String.valueOf(seed));
   }
 }

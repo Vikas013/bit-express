@@ -12,6 +12,7 @@ public record RestaurantResponse(
     String locality,
     String city,
     String country,
+    String countryCode,
     List<String> cuisines,
     Double aggregateRating,
     String ratingText,

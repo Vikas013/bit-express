@@ -10,6 +10,7 @@ import com.example.bit_express.search.NlQueryParser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.bson.Document;
@@ -34,6 +35,18 @@ public class RestaurantService {
   static final int DEFAULT_PAGE_SIZE = 10;
   static final int MAX_PAGE_SIZE = 100;
   private static final String DISTANCE_FIELD = "distanceKm";
+  private static final String DISTANCE = "distance";
+  private static final String RATING = "rating";
+  private static final Map<String, String> SORT_FIELDS =
+      Map.of(
+          RATING,
+          "aggregateRating",
+          "cost",
+          "averageCostForTwo",
+          "name",
+          "name",
+          DISTANCE,
+          DISTANCE_FIELD);
 
   private final RestaurantRepository restaurantRepository;
   private final MongoTemplate mongoTemplate;
@@ -58,7 +71,7 @@ public class RestaurantService {
     r.setCuisines(req.cuisines().stream().map(String::trim).filter(StringUtils::hasText).toList());
     r.setAverageCostForTwo(req.averageCostForTwo());
     r.setCurrency(StringUtils.hasText(req.currency()) ? req.currency().trim() : "INR");
-    r.setAggregateRating(req.aggregateRating() != null ? req.aggregateRating() : 0.0);
+    r.setAggregateRating(req.aggregateRating());
     r.setHasOnlineDelivery(Boolean.TRUE.equals(req.hasOnlineDelivery()));
     r.setHasTableBooking(Boolean.TRUE.equals(req.hasTableBooking()));
     if (req.latitude() != null && req.longitude() != null) {
@@ -77,13 +90,14 @@ public class RestaurantService {
   }
 
   public PagedRestaurantResponse list(String tenantId, RestaurantQueryParams params) {
-    return execute(tenantId, params, null, null, List.of());
+    return execute(tenantId, withResolvedSort(params), null, null, List.of());
   }
 
   public PagedRestaurantResponse search(
       String tenantId, String query, RestaurantQueryParams explicit) {
     NlQueryParser.ParseResult parsed = nlQueryParser.parse(query, explicit);
-    return execute(tenantId, parsed.params(), query, parsed.params(), parsed.warnings());
+    RestaurantQueryParams params = withResolvedSort(parsed.params());
+    return execute(tenantId, params, query, params, parsed.warnings());
   }
 
   private Optional<Restaurant> findByExternalId(String tenantId, String id) {
@@ -104,7 +118,6 @@ public class RestaurantService {
     validate(params);
     int page = params.page() == null ? 0 : params.page();
     int size = Math.min(MAX_PAGE_SIZE, params.size() == null ? DEFAULT_PAGE_SIZE : params.size());
-    String sortBy = sortBy(params);
 
     Criteria filter = buildFilter(tenantId, params);
     List<AggregationOperation> pipeline = new ArrayList<>();
@@ -121,8 +134,8 @@ public class RestaurantService {
     } else {
       pipeline.add(Aggregation.match(filter));
     }
-    if (!"distance".equals(sortBy)) {
-      pipeline.add(Aggregation.sort(buildSort(sortBy, params.sortDir())));
+    if (!DISTANCE.equals(params.sortBy())) {
+      pipeline.add(Aggregation.sort(buildSort(params.sortBy(), params.sortDir())));
     }
     pipeline.add(
         Aggregation.facet(Aggregation.skip((long) page * size), Aggregation.limit(size))
@@ -161,33 +174,45 @@ public class RestaurantService {
     if (!params.hasGeo() && params.maxDistanceKm() != null) {
       throw new IllegalArgumentException("maxDistanceKm requires lat and lon");
     }
-    if (!params.hasGeo() && "distance".equals(sortBy(params))) {
+    if (!params.hasGeo() && DISTANCE.equals(params.sortBy())) {
       throw new IllegalArgumentException("sortBy=distance requires lat and lon");
     }
   }
 
-  private static String sortBy(RestaurantQueryParams params) {
-    if (StringUtils.hasText(params.sortBy())) {
-      return params.sortBy().toLowerCase(Locale.ROOT);
+  private static RestaurantQueryParams withResolvedSort(RestaurantQueryParams p) {
+    String sortBy =
+        StringUtils.hasText(p.sortBy())
+            ? p.sortBy().toLowerCase(Locale.ROOT)
+            : p.hasGeo() ? DISTANCE : RATING;
+    if (!SORT_FIELDS.containsKey(sortBy)) {
+      throw new IllegalArgumentException("sortBy must be one of rating, cost, name, distance");
     }
-    return params.hasGeo() ? "distance" : "rating";
+    String sortDir;
+    if (DISTANCE.equals(sortBy)) {
+      sortDir = "asc";
+    } else if (StringUtils.hasText(p.sortDir())) {
+      sortDir = Sort.Direction.fromString(p.sortDir()).name().toLowerCase(Locale.ROOT);
+    } else {
+      sortDir = RATING.equals(sortBy) ? "desc" : "asc";
+    }
+    return new RestaurantQueryParams(
+        p.name(),
+        p.city(),
+        p.country(),
+        p.cuisines(),
+        p.minRating(),
+        p.maxCostForTwo(),
+        p.lat(),
+        p.lon(),
+        p.maxDistanceKm(),
+        sortBy,
+        sortDir,
+        p.page(),
+        p.size());
   }
 
   private static Sort buildSort(String sortBy, String sortDir) {
-    String field =
-        switch (sortBy) {
-          case "cost" -> "averageCostForTwo";
-          case "name" -> "name";
-          case "rating" -> "aggregateRating";
-          default ->
-              throw new IllegalArgumentException(
-                  "sortBy must be one of rating, cost, name, distance");
-        };
-    Sort.Direction defaultDirection =
-        "rating".equals(sortBy) ? Sort.Direction.DESC : Sort.Direction.ASC;
-    Sort.Direction direction =
-        StringUtils.hasText(sortDir) ? Sort.Direction.fromString(sortDir) : defaultDirection;
-    return Sort.by(direction, field, "_id");
+    return Sort.by(Sort.Direction.fromString(sortDir), SORT_FIELDS.get(sortBy), "_id");
   }
 
   private static Criteria buildFilter(String tenantId, RestaurantQueryParams params) {
@@ -238,6 +263,7 @@ public class RestaurantService {
         r.getLocality(),
         r.getCity(),
         r.getCountry(),
+        r.getCountryCode(),
         r.getCuisines(),
         r.getAggregateRating(),
         r.getRatingText(),

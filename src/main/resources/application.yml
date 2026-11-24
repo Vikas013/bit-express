@@ -3,7 +3,6 @@ spring:
     uri: ${SPRING_MONGODB_URI:mongodb://127.0.0.1:27017/biteexpress}
   data:
     mongodb:
-      uri: ${SPRING_MONGODB_URI:mongodb://127.0.0.1:27017/biteexpress}
       auto-index-creation: true
 
 app:

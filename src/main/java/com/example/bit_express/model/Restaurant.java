@@ -39,6 +39,7 @@ public class Restaurant {
   private String city;
   private String cityNormalized;
   private String country;
+  private String countryCode;
   private List<String> cuisines;
   private List<String> cuisinesNormalized;
   private Integer averageCostForTwo;
@@ -128,6 +129,14 @@ public class Restaurant {
 
   public void setCountry(String country) {
     this.country = country;
+  }
+
+  public String getCountryCode() {
+    return countryCode;
+  }
+
+  public void setCountryCode(String countryCode) {
+    this.countryCode = countryCode;
   }
 
   public List<String> getCuisines() {

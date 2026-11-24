@@ -31,56 +31,36 @@ public class RuleBasedNlQueryParser implements NlQueryParser {
   private static final Pattern CHEAPEST_PATTERN =
       Pattern.compile("\\b(cheapest|budget|affordable|low cost)\\b");
 
-  private static final Map<String, String> CITY_ALIASES =
+  private static final Map<String, String> PLACE_ALIASES =
       Map.of(
           "gurugram", "gurgaon",
           "bengaluru", "bangalore",
           "bombay", "mumbai",
           "madras", "chennai",
-          "calcutta", "kolkata");
+          "calcutta", "kolkata",
+          "uk", "united kingdom",
+          "usa", "united states",
+          "united arab emirates", "uae");
 
   private static final Map<String, String> DISH_TO_CUISINE =
       Map.ofEntries(
           Map.entry("vada pav", "Street Food"),
           Map.entry("pav bhaji", "Street Food"),
+          Map.entry("chole bhature", "Street Food"),
           Map.entry("chaat", "Street Food"),
           Map.entry("golgappa", "Street Food"),
           Map.entry("dosa", "South Indian"),
           Map.entry("idli", "South Indian"),
           Map.entry("uttapam", "South Indian"),
-          Map.entry("biryani", "Biryani"),
           Map.entry("butter chicken", "North Indian"),
           Map.entry("paneer", "North Indian"),
-          Map.entry("dim sum", "Chinese"),
           Map.entry("momos", "Chinese"),
-          Map.entry("sushi", "Japanese"),
-          Map.entry("pasta", "Italian"),
-          Map.entry("burger", "Burger"));
-
-  private static final Map<String, String> COUNTRY_MAP =
-      Map.ofEntries(
-          Map.entry("india", "India"),
-          Map.entry("australia", "Australia"),
-          Map.entry("brazil", "Brazil"),
-          Map.entry("canada", "Canada"),
-          Map.entry("indonesia", "Indonesia"),
-          Map.entry("new zealand", "New Zealand"),
-          Map.entry("philippines", "Philippines"),
-          Map.entry("qatar", "Qatar"),
-          Map.entry("singapore", "Singapore"),
-          Map.entry("south africa", "South Africa"),
-          Map.entry("sri lanka", "Sri Lanka"),
-          Map.entry("turkey", "Turkey"),
-          Map.entry("uae", "UAE"),
-          Map.entry("united arab emirates", "UAE"),
-          Map.entry("united kingdom", "United Kingdom"),
-          Map.entry("uk", "United Kingdom"),
-          Map.entry("united states", "United States"),
-          Map.entry("usa", "United States"));
+          Map.entry("pasta", "Italian"));
 
   private final MongoOperations mongoOperations;
   private volatile List<String> cachedCities = List.of();
   private volatile List<String> cachedCuisines = List.of();
+  private volatile List<String> cachedCountries = List.of();
 
   public RuleBasedNlQueryParser(MongoOperations mongoOperations) {
     this.mongoOperations = mongoOperations;
@@ -89,6 +69,7 @@ public class RuleBasedNlQueryParser implements NlQueryParser {
   public void refreshVocabulary() {
     cachedCities = distinctLongestFirst("city");
     cachedCuisines = distinctLongestFirst("cuisines");
+    cachedCountries = distinctLongestFirst("country");
   }
 
   private List<String> distinctLongestFirst(String field) {
@@ -117,7 +98,7 @@ public class RuleBasedNlQueryParser implements NlQueryParser {
     List<String> warnings = new ArrayList<>();
 
     if (StringUtils.hasText(query)) {
-      String text = withCityAliases(query.toLowerCase(Locale.ROOT).trim());
+      String text = withPlaceAliases(query.toLowerCase(Locale.ROOT).trim());
       boolean matched = false;
 
       if (maxCost == null) {
@@ -133,7 +114,7 @@ public class RuleBasedNlQueryParser implements NlQueryParser {
         matched |= city != null;
       }
       if (!StringUtils.hasText(city) && !StringUtils.hasText(country)) {
-        country = findTerm(text, COUNTRY_MAP).orElse(null);
+        country = findTerm(text, cachedCountries).orElse(null);
         matched |= country != null;
       }
       if (cuisines == null || cuisines.isEmpty()) {
@@ -191,8 +172,8 @@ public class RuleBasedNlQueryParser implements NlQueryParser {
     return new ParseResult(params, warnings);
   }
 
-  private static String withCityAliases(String text) {
-    for (Map.Entry<String, String> alias : CITY_ALIASES.entrySet()) {
+  private static String withPlaceAliases(String text) {
+    for (Map.Entry<String, String> alias : PLACE_ALIASES.entrySet()) {
       text = wordPattern(alias.getKey()).matcher(text).replaceAll(alias.getValue());
     }
     return text;

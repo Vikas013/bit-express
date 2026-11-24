@@ -8,7 +8,9 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Currency;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -28,23 +30,27 @@ public class CsvRestaurantSeeder implements ApplicationRunner {
 
   private static final Logger log = LoggerFactory.getLogger(CsvRestaurantSeeder.class);
 
-  private static final Map<Integer, String> COUNTRY_CODE_MAP =
+  private static final String NOT_RATED = "Not rated";
+
+  private record Country(String name, String isoCode) {}
+
+  private static final Map<Integer, Country> ZOMATO_COUNTRIES =
       Map.ofEntries(
-          Map.entry(1, "India"),
-          Map.entry(14, "Australia"),
-          Map.entry(30, "Brazil"),
-          Map.entry(37, "Canada"),
-          Map.entry(94, "Indonesia"),
-          Map.entry(148, "New Zealand"),
-          Map.entry(162, "Philippines"),
-          Map.entry(166, "Qatar"),
-          Map.entry(184, "Singapore"),
-          Map.entry(189, "South Africa"),
-          Map.entry(191, "Sri Lanka"),
-          Map.entry(208, "Turkey"),
-          Map.entry(214, "UAE"),
-          Map.entry(215, "United Kingdom"),
-          Map.entry(216, "United States"));
+          Map.entry(1, new Country("India", "IN")),
+          Map.entry(14, new Country("Australia", "AU")),
+          Map.entry(30, new Country("Brazil", "BR")),
+          Map.entry(37, new Country("Canada", "CA")),
+          Map.entry(94, new Country("Indonesia", "ID")),
+          Map.entry(148, new Country("New Zealand", "NZ")),
+          Map.entry(162, new Country("Philippines", "PH")),
+          Map.entry(166, new Country("Qatar", "QA")),
+          Map.entry(184, new Country("Singapore", "SG")),
+          Map.entry(189, new Country("South Africa", "ZA")),
+          Map.entry(191, new Country("Sri Lanka", "LK")),
+          Map.entry(208, new Country("Turkey", "TR")),
+          Map.entry(214, new Country("UAE", "AE")),
+          Map.entry(215, new Country("United Kingdom", "GB")),
+          Map.entry(216, new Country("United States", "US")));
 
   private final RestaurantRepository restaurantRepository;
   private final RuleBasedNlQueryParser nlQueryParser;
@@ -135,29 +141,31 @@ public class CsvRestaurantSeeder implements ApplicationRunner {
     r.setAddress(getOptional(record, "Address"));
     r.setLocality(getOptional(record, "Locality"));
 
-    Integer countryCode = parseInt(getOptional(record, "Country Code"));
-    r.setCountry(
-        countryCode != null
-            ? COUNTRY_CODE_MAP.getOrDefault(countryCode, String.valueOf(countryCode))
-            : null);
-
-    String rawCuisines = getOptional(record, "Cuisines");
-    if (StringUtils.hasText(rawCuisines)) {
-      List<String> cuisineList =
-          Arrays.stream(rawCuisines.split(","))
-              .map(String::trim)
-              .filter(StringUtils::hasText)
-              .toList();
-      r.setCuisines(cuisineList);
-    } else {
-      r.setCuisines(List.of());
+    Integer zomatoCountryCode = parseInt(getOptional(record, "Country Code"));
+    Country country = zomatoCountryCode == null ? null : ZOMATO_COUNTRIES.get(zomatoCountryCode);
+    if (country != null) {
+      r.setCountry(country.name());
+      r.setCountryCode(country.isoCode());
+      r.setCurrency(Currency.getInstance(Locale.of("", country.isoCode())).getCurrencyCode());
     }
 
+    String rawCuisines = getOptional(record, "Cuisines");
+    r.setCuisines(
+        rawCuisines == null
+            ? List.of()
+            : Arrays.stream(rawCuisines.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList());
+
     r.setAverageCostForTwo(parseInt(getOptional(record, "Average Cost for two")));
-    r.setCurrency(getOptional(record, "Currency"));
     r.setPriceRange(parseInt(getOptional(record, "Price range")));
-    r.setAggregateRating(parseDouble(getOptional(record, "Aggregate rating")));
-    r.setRatingText(getOptional(record, "Rating text"));
+    String ratingText = getOptional(record, "Rating text");
+    r.setRatingText(ratingText);
+    if (!NOT_RATED.equalsIgnoreCase(ratingText)) {
+      r.setAggregateRating(parseDouble(getOptional(record, "Aggregate rating")));
+    }
     r.setVotes(parseInt(getOptional(record, "Votes")));
     r.setHasOnlineDelivery(parseYesNo(getOptional(record, "Has Online delivery")));
     r.setHasTableBooking(parseYesNo(getOptional(record, "Has Table booking")));

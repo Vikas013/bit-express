@@ -118,6 +118,22 @@ class RestaurantApiIntegrationTest {
   }
 
   @Test
+  void createWithoutRatingStoresTheRestaurantAsUnrated() throws Exception {
+    mockMvc
+        .perform(
+            postJson(
+                """
+                {"name": "Fresh Opening", "city": "Gurgaon", "address": "Sample Street",
+                 "cuisines": ["Cafe"]}
+                """))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.aggregateRating").doesNotExist());
+    mockMvc
+        .perform(get("/v1/restaurants?minRating=0"))
+        .andExpect(jsonPath("$.totalElements", is(0)));
+  }
+
+  @Test
   void getByIdAcceptsTheZomatoRestaurantId() throws Exception {
     Restaurant seeded = new Restaurant();
     seeded.setTenantId("bite-express");
@@ -304,6 +320,8 @@ class RestaurantApiIntegrationTest {
             get("/v1/restaurants/search")
                 .param("q", "Restaurants in Gurgaon under Rs. 1000 for two"))
         .andExpect(jsonPath("$.interpretedFilters.maxCostForTwo", is(1000)))
+        .andExpect(jsonPath("$.interpretedFilters.sortBy", is("rating")))
+        .andExpect(jsonPath("$.interpretedFilters.sortDir", is("desc")))
         .andExpect(jsonPath("$.totalElements", is(3)));
     mockMvc
         .perform(get("/v1/restaurants/search").param("q", "Nearest place that serves Vada Pav"))
